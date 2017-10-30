@@ -1,0 +1,152 @@
+---
+title: "Prediction Assignment Write Up"
+author: "Nica Stefan"
+date: "30 octombrie 2017"
+output: html_document
+---
+
+#1. Overview
+
+The current document is the final report of Peer Assesment Project from Coursera's course Practical Machine Learning, specialization Data Science. It's build in RStudio, using its knitr functions and published in html format. The goal of the project is to predict how 6 participants performed some exercise as described below. This is the "classe" variable in the training set. The algorithm built here will be applied to 20 test cases available in test data and the predictions are submitted in appropiate format to the Course Project Prediction Quiz for grading.
+
+#2. Summary 
+
+Using latest technology we are able to collect a large amount of data about personal activity. These type of devices gives us quantified self movement data, for us to have a clear picture about our health and to find different behaviours in our bodies. One of the most common things is getting the number of exercises and not the quality of execution. We will use data from accelerometers of 6 participants. They performed barbell lifts correctly and incorrently in 5 different ways. More information : http://groupware.les.inf.puc-rio.br/har
+
+#3. Data Preprocessing 
+
+#3.1 Data
+Train set : https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+Test set : https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+#3.2 Loading packages
+```{r, echo=TRUE}
+library(knitr)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(corrplot)
+library(ggplot2)
+library(caret)
+library(ggcorrplot)
+library(GGally)
+set.seed(1000)
+```
+
+#3.3 Data Preprocessing 
+```{r, echo = FALSE}
+TrainFile <- "C:/workspace/R training/Prediction-Assignment-Writeup/pml-training.csv"
+TestFile <- "C:/workspace/R training/Prediction-Assignment-Writeup/pml-testing.csv"
+```
+
+```{r, echo=TRUE}
+train <- read.csv(TrainFile)
+dim(train)
+test <- read.csv(TestFile)
+dim(test)
+```
+
+```{r, echo=TRUE}
+# creating data partition
+inTrain <- createDataPartition(train$classe, p = 0.7, list = FALSE)
+TrainSet <- train[inTrain,]
+TestSet <- train[-inTrain,]
+
+dim(TrainSet)
+dim(TestSet)
+
+
+#Both datasets have equal number of variables. Nor, for a better prediction we will exclude NA's, the Near Zone Variance and the Identification variables
+
+#Removing variables with Nearly Zero Variance
+
+nearzerovariance <- nearZeroVar(TrainSet)
+TrainSet <- TrainSet[,-nearzerovariance]
+TestSet <- TestSet[,-nearzerovariance]
+dim(TrainSet)
+dim(TestSet)
+
+#Removing variables which are almost NA
+
+RmvNA <- sapply(TrainSet, function(x) mean(is.na(x))) > 0.95
+TrainSet <- TrainSet[,RmvNA==FALSE]
+TestSet <- TestSet[,RmvNA==FALSE]
+dim(TrainSet)
+dim(TestSet)
+
+#Removing Identification columns 1:5
+
+TrainSet <- TrainSet[,-(1:5)]
+TestSet <- TestSet[,-(1:5)]
+dim(TestSet)
+dim(TrainSet)
+
+
+```
+
+#4. Prediction Model Building
+
+We will apply the most popular three solutions to model the regressions: Random Forest, Decision Tree and Generalized Boosted Model. A Confusion Matrix is plotted at the end of each model and the one one with the best accuracy will be used for the quiz predictions.
+
+#4.1 Random Forest
+```{r, echo=TRUE}
+#model fitting
+ctrlRF <- trainControl(method = "cv", number =3, verboseIter = FALSE)
+modfitRF <- train(classe ~., data = TrainSet, method = "rf", trControl = ctrlRF)
+modfitRF$finalModel
+
+# predicting on test dataset
+predictRF <- predict(modfitRF, newdata = TestSet)
+CMRF <- confusionMatrix(predictRF,TestSet$classe)
+CMRF
+#plot matrix results
+plot(CMRF$table, col = CMRF$byClass, main = paste("RF - Accuracy = ", round(CMRF$overall['Accuracy'],4)))
+```
+
+#4.2 Decision Tree
+```{r, echo = TRUE}
+#model fitting
+modfitDT <- rpart(classe ~ ., data=TrainSet, method="class")
+rpart.plot(modfitDT)
+
+#predicting on test dataset
+predictDT <- predict(modfitDT, newdata=TestSet, type="class")
+CMDT <- confusionMatrix(predictDT, TestSet$classe)
+CMDT
+#plot matrix results
+plot(CMDT$table, col = CMDT$byClass, 
+     main = paste("Decision Tree - Accuracy =",
+                  round(CMDT$overall['Accuracy'], 4)))
+```
+
+#4.3 Generalized Boosted Model
+```{r, echo = TRUE}
+#model fitting
+ctrlGBM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+modFitGBM  <- train(classe ~ ., data=TrainSet, method = "gbm",
+                    trControl = ctrlGBM, verbose = FALSE)
+modFitGBM$finalModel
+
+# predicting on test dataset
+predictGBM <- predict(modFitGBM, newdata=TestSet)
+CMGBM <- confusionMatrix(predictGBM, TestSet$classe)
+CMGBM
+# plot matrix results
+plot(CMGBM$table, col = CMGBM$byClass, 
+     main = paste("GBM - Accuracy =", round(CMGBM$overall['Accuracy'], 4)))
+```
+
+#5. Aplying the selected Model to the Test Data
+
+The accuracy of the three models used is:
+Rf : 0.9971
+DT : 0.7648
+GBM : 0.9856
+
+Due to this results I will use the Random Forest model to predict the 20 results (testing dataset)
+```{r, echo= TRUE}
+predictTEST <- predict(modfitRF, newdata=test)
+predictTEST
+```
